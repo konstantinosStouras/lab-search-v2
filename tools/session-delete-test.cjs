@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../admin/admin.js'), 'utf8');
 const start = source.indexOf('  function runAction(');
-const end = source.indexOf('\n  function ', start + 1);
+const end = source.indexOf('\n  function exportRun(', start + 1);
 function setup({ local = false, locked = false, failAt = '', confirmed = true } = {}) {
   const calls = [], alerts = [];
   const sept = { id: 'sept', code: 'SEPT', locked: true };
@@ -13,7 +13,11 @@ function setup({ local = false, locked = false, failAt = '', confirmed = true } 
   let rows = [sept, target];
   const ctx = vm.createContext({
     LOCAL: local, current: sept, editingId: 'sept',
-    confirm: () => confirmed, alert: message => alerts.push(message),
+    esc: value => String(value),
+    askSummary: (title, message, body, label, onOk) => {
+      if (label === 'Delete session') return confirmed ? onOk() : undefined;
+      alerts.push(message);
+    },
     $: () => ({ innerHTML: 'created' }),
     localRuns: () => rows, saveLocalRuns: value => { rows = value; },
     loadRuns: () => { calls.push('refresh'); },

@@ -23,7 +23,7 @@
       Dict = window.SVDictionary;
   var FB = window.SVFirebase;
   var releaseLabel = document.getElementById('admin-release');
-  if (releaseLabel) releaseLabel.textContent = 'Admin release 20261107-2';
+  if (releaseLabel) releaseLabel.textContent = 'Admin release 20261107-3';
 
   // `current`   — the session every OTHER screen is looking at (roster, monitor,
   //               data, notes). The panel picks one on load so those screens
@@ -591,13 +591,23 @@
     if (act === 'delete') {
       if (btn && btn.disabled) return;
       if (run.locked) {
-        alert('This session is locked because participants have entered. It cannot be deleted. Close the session instead.');
+        showDeleteMessage('Session cannot be deleted', 'This session is locked because participants have entered. Close the session instead.');
         return;
       }
       var n = run.stats ? (run.stats.started || 0) : 0;
-      if (!confirm('Delete the session "' + (run.code || run.id) + ' — ' + (run.name || 'untitled') + '"?\n\n' +
-        'This removes the session AND its event log' + (n ? ' (' + n + ' participant' + (n === 1 ? '' : 's') + ' so far)' : '') +
-        '. Export the data first if you want to keep it.\n\nThis cannot be undone.')) return;
+      return askSummary('Delete session ' + (run.code || run.id) + '?',
+        'This removes <b>' + esc(run.name || 'untitled') + '</b> and its event log' +
+        (n ? ' (' + n + ' participants so far)' : '') +
+        '. Export the data first if you want to keep it. <b>This cannot be undone.</b>',
+        '', 'Delete session', function () { return deleteSession(run, btn); });
+    }
+  }
+
+  function showDeleteMessage(title, message) {
+    return askSummary(title, esc(message), '', 'OK', function () {});
+  }
+
+  function deleteSession(run, btn) {
       var oldText = btn ? btn.textContent : '';
       if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
       return Promise.resolve().then(function () {
@@ -610,12 +620,11 @@
         $('nr-created').innerHTML = '';
         return loadRuns();
       }).catch(function (e) {
-        alert('Could not complete deletion of session ' + (run.code || run.id) + ':\n\n' +
-          String(e && e.message || e) + '\n\nRefresh the list before retrying.');
+        showDeleteMessage('Could not delete session ' + (run.code || run.id),
+          String(e && e.message || e) + ' Refresh the list before retrying.');
       }).finally(function () {
         if (btn) { btn.disabled = false; btn.textContent = oldText; }
       });
-    }
   }
 
   // "Export data" from a card is the whole job in one press: select the session,
