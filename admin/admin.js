@@ -22,6 +22,8 @@
       Ai = window.SVAi, Content = window.SVContent, X = window.SVExport, Xlsx = window.SVXlsx,
       Dict = window.SVDictionary;
   var FB = window.SVFirebase;
+  var releaseLabel = document.getElementById('admin-release');
+  if (releaseLabel) releaseLabel.textContent = 'Admin release 20261107-2';
 
   // `current`   — the session every OTHER screen is looking at (roster, monitor,
   //               data, notes). The panel picks one on load so those screens
@@ -587,15 +589,32 @@
     if (act === 'close') { setStatus(run, 'closed'); return; }
     if (act === 'open-entry') { setStatus(run, 'open'); return; }
     if (act === 'delete') {
+      if (btn && btn.disabled) return;
+      if (run.locked) {
+        alert('This session is locked because participants have entered. It cannot be deleted. Close the session instead.');
+        return;
+      }
       var n = run.stats ? (run.stats.started || 0) : 0;
       if (!confirm('Delete the session "' + (run.code || run.id) + ' — ' + (run.name || 'untitled') + '"?\n\n' +
         'This removes the session AND its event log' + (n ? ' (' + n + ' participant' + (n === 1 ? '' : 's') + ' so far)' : '') +
         '. Export the data first if you want to keep it.\n\nThis cannot be undone.')) return;
-      var wipe = (LOCAL || !FB.isConfigured()) ? Promise.resolve(0) : FB.deleteRunData(run.id).catch(function () { return 0; });
-      wipe.then(function () {
+      var oldText = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+      return Promise.resolve().then(function () {
+        return LOCAL ? 0 : FB.deleteRunData(run.id);
+      }).then(function () {
         return LOCAL ? Promise.resolve(saveLocalRuns(localRuns().filter(function (r) { return r.id !== run.id; })))
                      : FB.deleteRun(run.id).then(function () { return FB.audit(run.id, 'delete_run', run.name); });
-      }).then(function () { current = null; editingId = null; loadRuns(); });
+      }).then(function () {
+        if (current && current.id === run.id) { current = null; editingId = null; }
+        $('nr-created').innerHTML = '';
+        return loadRuns();
+      }).catch(function (e) {
+        alert('Could not complete deletion of session ' + (run.code || run.id) + ':\n\n' +
+          String(e && e.message || e) + '\n\nRefresh the list before retrying.');
+      }).finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = oldText; }
+      });
     }
   }
 
