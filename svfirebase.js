@@ -418,12 +418,24 @@ window.SVFirebase = (function () {
       });
   }
   function deleteRunData(runId) {
-    return init().then(function () { return sdk.fs.getDocs(sdk.fs.collection(db, C.events)); })
-      .then(function (qs) {
-        var dels = [];
-        qs.forEach(function (d) { if ((d.data() || {}).run_id === runId) dels.push(sdk.fs.deleteDoc(d.ref)); });
-        return Promise.all(dels).then(function () { return dels.length; });
-      });
+    if (!runId) return Promise.reject(new Error('A session ID is required for deletion.'));
+    return init().then(function () {
+      var total = 0;
+      var q = sdk.fs.query(sdk.fs.collection(db, C.events),
+        sdk.fs.where('run_id', '==', runId), sdk.fs.limit(400));
+      function removePage() {
+        return sdk.fs.getDocs(q).then(function (qs) {
+          if (qs.empty) return total;
+          var batch = sdk.fs.writeBatch(db);
+          qs.forEach(function (d) { batch.delete(d.ref); });
+          return batch.commit().then(function () {
+            total += qs.size;
+            return qs.size < 400 ? total : removePage();
+          });
+        });
+      }
+      return removePage();
+    });
   }
 
   // ---- audit (§17b "Access and audit") ------------------------------------

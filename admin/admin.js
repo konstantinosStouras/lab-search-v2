@@ -23,7 +23,7 @@
       Dict = window.SVDictionary;
   var FB = window.SVFirebase;
   var releaseLabel = document.getElementById('admin-release');
-  if (releaseLabel) releaseLabel.textContent = 'Admin release 20261107-3';
+  if (releaseLabel) releaseLabel.textContent = 'Admin release 20261107-4';
 
   // `current`   — the session every OTHER screen is looking at (roster, monitor,
   //               data, notes). The panel picks one on load so those screens
@@ -614,11 +614,17 @@
         return LOCAL ? 0 : FB.deleteRunData(run.id);
       }).then(function () {
         return LOCAL ? Promise.resolve(saveLocalRuns(localRuns().filter(function (r) { return r.id !== run.id; })))
-                     : FB.deleteRun(run.id).then(function () { return FB.audit(run.id, 'delete_run', run.name); });
+                     : FB.deleteRun(run.id);
       }).then(function () {
         if (current && current.id === run.id) { current = null; editingId = null; }
         $('nr-created').innerHTML = '';
-        return loadRuns();
+        // The write has succeeded. Update the existing list without rereading
+        // every session and participant, or waiting for an audit-log round trip.
+        runs = runs.filter(function (r) { return r.id !== run.id; });
+        renderRuns();
+        if (!LOCAL) Promise.resolve().then(function () {
+          return FB.audit(run.id, 'delete_run', run.name);
+        }).catch(function () {});
       }).catch(function (e) {
         showDeleteMessage('Could not delete session ' + (run.code || run.id),
           String(e && e.message || e) + ' Refresh the list before retrying.');

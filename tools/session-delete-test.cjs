@@ -12,7 +12,7 @@ function setup({ local = false, locked = false, failAt = '', confirmed = true } 
   const target = { id: 'sdf', code: 'SDF', name: 'test', locked };
   let rows = [sept, target];
   const ctx = vm.createContext({
-    LOCAL: local, current: sept, editingId: 'sept',
+    LOCAL: local, current: sept, editingId: 'sept', runs: rows,
     esc: value => String(value),
     askSummary: (title, message, body, label, onOk) => {
       if (label === 'Delete session') return confirmed ? onOk() : undefined;
@@ -20,7 +20,7 @@ function setup({ local = false, locked = false, failAt = '', confirmed = true } 
     },
     $: () => ({ innerHTML: 'created' }),
     localRuns: () => rows, saveLocalRuns: value => { rows = value; },
-    loadRuns: () => { calls.push('refresh'); },
+    renderRuns: () => { calls.push('render'); },
     FB: Object.fromEntries(['deleteRunData', 'deleteRun', 'audit'].map(name => [name, async id => {
       calls.push(name);
       assert.equal(id, 'sdf');
@@ -50,7 +50,9 @@ function setup({ local = false, locked = false, failAt = '', confirmed = true } 
   }
   const cloud = setup();
   await cloud.ctx.runAction('delete', cloud.target, cloud.button);
-  assert.deepEqual(cloud.calls, ['deleteRunData', 'deleteRun', 'audit', 'refresh']);
+  assert.deepEqual(cloud.calls, ['deleteRunData', 'deleteRun', 'render', 'audit']);
+  assert.equal(cloud.ctx.runs.length, 1);
+  assert.equal(cloud.ctx.runs[0], cloud.sept);
   assert.deepEqual(cloud.alerts, []);
   assert.equal(cloud.ctx.current, cloud.sept);
   const local = setup({ local: true });
