@@ -217,19 +217,19 @@ const secs = await pg.$$eval('.sess-sec .sess-head h3', els => els.map(e => e.te
 ok(JSON.stringify(secs) === JSON.stringify(['Create a session', 'Active sessions', 'Completed sessions']),
   'the screen reads Create · Active · Completed — creating first, then the two groups the other class ' +
   'admin panels use', secs.join(' | '));
-ok((await pg.locator('#runs-active .run-card').count()) === 1, 'a draft session is ACTIVE, not completed');
+ok((await pg.locator('#runs-active .run-card').count()) === 1, 'an open session is ACTIVE, not completed');
 ok(/1 active/.test(await pg.locator('#runs-active-n').innerText()), 'the active section carries its count');
 ok(/No completed/.test(await pg.locator('#runs-done').innerText()), 'and the empty completed section says so');
 
 const cardText = await pg.locator('.run-card').innerText();
-ok(/Smoke session/.test(cardText) && /draft/.test(cardText), 'the card shows the session name and status');
+ok(/Smoke session/.test(cardText) && /open/.test(cardText), 'the card shows the session name and status');
 ok(new RegExp(code).test(cardText), 'with its code as the headline');
 ok(/0 participants/.test(cardText), 'and a participant count, like the ideasearchlab cards');
 ok(/28 rounds/.test(cardText), 'and states that a session is 28 rounds');
 ok(/Scored in the browser|Scored on the server/.test(cardText), 'and where the score is computed');
 
 const cardBtns = await pg.$$eval('#runs-active .run-card .run-acts button', els => els.map(e => e.textContent.trim()));
-['Open', 'Copy link', '⬇ Export data', '🧪 Test round', 'Clone', 'Open entry', 'Delete'].forEach(want => {
+['Open', 'Copy link', '⬇ Export data', '🧪 Test round', 'Clone', 'Close session', 'Delete'].forEach(want => {
   ok(cardBtns.some(b => b === want), 'an active card offers ' + want, cardBtns.join(' | '));
 });
 const pill = await pg.$$eval('#runs-active .run-card .run-acts button', els => els.map(e => getComputedStyle(e).borderWidth));
@@ -690,21 +690,21 @@ ok(await pg.locator('#sess-summary').isVisible(),
   'creating from the card still summarises the session FIRST — the pool and the 28 specs freeze here too');
 const sumC = await pg.locator('#sess-summary').innerText();
 ok(/Spring MBA 2026/.test(sumC) && /SPRINGMBA2026/.test(sumC), 'the summary names the session and its code');
-ok(/Entry: closed/.test(sumC), 'and states that it is created closed, exactly as the lead text promises');
+ok(/Entry: open/.test(sumC), 'and states that entry opens after validation');
 await pg.locator('#sum-ok').click();
 await pg.waitForTimeout(700);
 
 ok((await pg.locator('.run-card').count()) === cardsBefore + 1, 'confirming creates the session');
 const newCard = await pg.locator('#runs-active .run-card', { hasText: 'SPRINGMBA2026' }).innerText();
-ok(/Spring MBA 2026/.test(newCard) && /draft/.test(newCard),
-  'it lands in Active sessions under its name, as a draft', newCard.split('\n').slice(0, 3).join(' · '));
+ok(/Spring MBA 2026/.test(newCard) && /open/.test(newCard),
+  'it lands in Active sessions under its name, already open', newCard.split('\n').slice(0, 3).join(' · '));
 
 const created = await pg.locator('#nr-created').innerText();
 ok(/SPRINGMBA2026/.test(created) && /\?code=SPRINGMBA2026/.test(created),
   'the card reports the code and the participant link', created.split('\n').join(' · '));
 const boxBtns = await pg.$$eval('#nr-created button', els => els.map(e => e.textContent.trim()));
-ok(JSON.stringify(boxBtns) === JSON.stringify(['Copy link', 'Check its parameters', 'Open entry']),
-  'and offers the three things there are to do next', boxBtns.join(' | '));
+ok(JSON.stringify(boxBtns) === JSON.stringify(['Copy link', 'Check its parameters']),
+  'and offers the participant link and parameter review', boxBtns.join(' | '));
 ok((await pg.inputValue('#nr-name')) === '' && (await pg.inputValue('#nr-code')) === '',
   'the form clears, ready for the next session');
 
@@ -796,8 +796,8 @@ const demo = await pg.evaluate(() => {
     specs: JSON.parse(r.specsJson).map(s => [s.block, s.seed_shape, s.pre_opened.length, s.ai_k])
   };
 });
-ok(demo && demo.name === 'For testing purposes' && demo.status === 'draft',
-  'it is created as a draft named "For testing purposes" under the ID TEST');
+ok(demo && demo.name === 'For testing purposes' && demo.status === 'open',
+  'it is validated and opened as "For testing purposes" under the ID TEST');
 ok(JSON.stringify(demo.specs) === JSON.stringify([[1, 'OPEN', 0, 10], [1, 'BALANCED', 3, 3], [2, 'OPEN', 0, 10], [2, 'BALANCED', 3, 3]]),
   'its four rounds are: empty then pre-opened, in each of the two halves',
   JSON.stringify(demo.specs));
@@ -819,7 +819,7 @@ ok(!(await pg.locator('#sess-summary').count()) && /already exists/.test(await p
 const drafts = await pg.evaluate(() => JSON.parse(localStorage.getItem('searchv2:v3:admin:local') || '[]')
   .map(r => ({ code: r.code, status: r.status, entryOpen: r.ops && r.ops.entryOpen })));
 ok(drafts.every(r => r.status !== 'draft' || r.entryOpen === false),
-  'every session is created as a real draft — status draft AND entry closed',
+  'any remaining draft has entry closed',
   JSON.stringify(drafts));
 
 ok(errors.length === 0, 'no page errors anywhere in the panel', errors.slice(0, 5).join(' | '));

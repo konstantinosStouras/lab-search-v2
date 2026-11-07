@@ -265,16 +265,14 @@
     var p = savedDefaultParams();
     p.ops.runName = name;
     p.ops.code = code;
-    // It is created as a draft, so the entry flag must say so: app.js reads
-    // ops.entryOpen, and a draft carrying entryOpen:true would let people in
-    // before the validation gate has ever run.
-    p.ops.entryOpen = false;
+    // Creation validates before saving and opens entry on success.
+    p.ops.entryOpen = true;
     // The same gate the parameter form applies: creating freezes the mapping
     // pool and every round spec under these seeds, so they are read once first.
     askSummary('Create this session?',
       'It is built from the <b>saved default parameters</b>, which freezes the mapping pool and all <b>' +
       (2 * (p.rounds.warmupPerBlock + p.rounds.scoredPerBlock)) + ' round specs</b> under the seeds below. ' +
-      'It opens as a <b>draft</b>, so nobody can enter yet, and every parameter stays editable until the ' +
+      'It is validated automatically and <b>opens immediately</b> on success. Every parameter stays editable until the ' +
       'first participant claims a code.',
       summaryBoxes(p), 'Create session', function () {
         btn.disabled = true; btn.textContent = 'Creating…';
@@ -303,10 +301,9 @@
       '<div class="run-acts">' +
         '<button class="sBtn sBtnSec" data-cb="copy">Copy link</button>' +
         '<button class="sBtn sBtnPrimary" data-cb="params">Check its parameters</button>' +
-        '<button class="sBtn exportBtn" data-cb="open">Open entry</button>' +
       '</div>' +
-      '<div class="cb-hint">It is a <b>draft</b> until you open entry &mdash; which runs the validation gate ' +
-      'and asks you to confirm, because the first participant to enter locks every parameter.</div>' +
+      '<div class="cb-hint">Validation passed and <b>entry is open</b>. ' +
+      'The first participant to enter locks every parameter.</div>' +
       '</div>';
     host.querySelectorAll('button[data-cb]').forEach(function (b) {
       b.onclick = function () {
@@ -314,7 +311,6 @@
         var run = runs.filter(function (r) { return r.id === id; })[0];
         if (!run) { note('nr-note', 'That session is no longer in the list. Press Refresh.', true); return; }
         if (b.dataset.cb === 'params') { selectRun(run); openTab('params'); return; }
-        if (b.dataset.cb === 'open') setStatus(run, 'open');
       };
     });
   }
@@ -363,7 +359,7 @@
     p.assign.nextEntrantOverride = 'A';
     p.ops.runName = DEMO.name;
     p.ops.code = DEMO.code;
-    p.ops.entryOpen = false;
+    p.ops.entryOpen = true;
     p.ops.exitSurvey = false;
     p.ops.debrief = true;
     return p;
@@ -396,7 +392,8 @@
       'A short session to show a class how the game works: <b>2 rounds without the AI, then 2 with it</b>, ' +
       'and in each half one round that starts empty followed by one that starts with a few prizes already ' +
       'open. Every entrant gets the same order, the exit survey is off and it draws its prize curves from a ' +
-      'different shuffle than a default session, so it gives nothing away about the real one.',
+      'different shuffle than a default session, so it gives nothing away about the real one. ' +
+      'It is validated automatically and opens for entry immediately on success.',
       summaryBoxes(p), 'Create session', function () {
         btn.disabled = true;
         createRun(newRunDoc(p, DEMO.name, DEMO.code, demoContent())).then(function (id) {
@@ -791,9 +788,9 @@
     var obj = newRunDoc(p, name, autoCode(), Content.parseOverrides(run.contentJson || run.content));
     obj.clonedFrom = run.id;
     createRun(obj).then(function () {
-      note('save-note', 'Cloned. The clone is a <b>draft</b> with its own run_id, its own pool and its own specs.');
+      note('save-note', 'Cloned. Validation passed and <b>entry is open</b>, with its own run_id, pool and specs.');
       loadRuns();
-    });
+    }).catch(function (e) { note('save-note', 'Could not clone the session: ' + esc(String(e && e.message || e)), true); });
   }
 
   // The client-readable copy of a run (§17.4). Everything the participant's app
@@ -840,11 +837,7 @@
   function newRunDoc(p, name, code, contentOv) {
     var params = clone(p);
     params.ops.runName = name;
-    // Every session is created as a draft, so the entry flag has to agree with
-    // the status: app.js opens a session when `ops.entryOpen !== false` OR the
-    // status is 'open', so a draft created with the Operations toggle left on
-    // would be enterable before the validation gate had ever run. Entry is
-    // opened from the card, which runs that gate and asks for confirmation.
+    // Keep the candidate closed until createRun validates it before saving.
     params.ops.entryOpen = false;
     var pool = Pool.buildPool(params.env, params.env.generatorSeed);
     var specSeed = params.env.generatorSeed + 1;
@@ -863,6 +856,15 @@
     };
   }
   function createRun(obj) {
+    // Only new sessions use this path. Never reopen or rewrite existing runs.
+    try {
+      var a = artifacts(obj);
+      var v = Specs.validate(a.pool, a.specs, a.params);
+      if (!v.pass) return Promise.reject(new Error('Validation failed: ' + v.failures.join('; ')));
+    } catch (e) { return Promise.reject(e); }
+    obj.status = 'open';
+    obj.ops.entryOpen = true;
+    obj.params.ops.entryOpen = true;
     if (LOCAL) {
       var list = localRuns();
       obj.id = 'local-' + Date.now().toString(36);
@@ -1172,24 +1174,22 @@
       // chosen HERE, in the same breath, so "these are the parameters I want"
       // and "this is the session they belong to" are one decision.
       var pending = clone(currentParams);
-      pending.ops.entryOpen = false;   // what newRunDoc will write, so the summary can't promise otherwise
+      pending.ops.entryOpen = true;   // createRun opens entry after validation
       askSummary('Create this session?',
         'Creating freezes the mapping pool and all <b>' +
         (2 * (pending.rounds.warmupPerBlock + pending.rounds.scoredPerBlock)) +
-        ' round specs</b> under the seeds below. It opens as a <b>draft</b>, so nobody can enter yet — ' +
+        ' round specs</b> under the seeds below. It is validated and <b>opens immediately</b> on success - ' +
         'and no existing session is changed.',
         summaryBoxes(pending), 'Create session',
         function (v) {
           var obj = newRunDoc(currentParams, v.name, v.code, currentContent);
           createRun(obj).then(function (id) {
-            note('save-note', 'Session <b>' + esc(v.code) + '</b> created as a <b>draft</b>. Run the validation gate on the ' +
-              'Data screen — and check the round plots at the bottom of it — before opening entry.');
+            note('save-note', 'Session <b>' + esc(v.code) + '</b> created. Validation passed and <b>entry is open</b>.');
             // Select what was just created. Without this the form stayed on a
             // NEW session with editingId null, so pressing Save again created a
             // second session on the same code — and re-pointed the code at it.
             loadRuns(id);
-            // The created box carries Copy link and Open entry, so the session
-            // is one press from live rather than a hunt back through the cards.
+            // The created box carries the link for the newly opened session.
             showCreated(id, v.code, v.name);
             openTab('runs');
           }).catch(function (e) { note('save-note', 'Could not create the session: ' + esc(String(e && e.message || e)), true); });
